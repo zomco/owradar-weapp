@@ -1,7 +1,0 @@
-<!--components/wsc/wsc.wxml-->
-<view class="main">
-  <view wx:if="{{ isConnecting }}" class="loader"><t-loading theme="circular" size="40rpx" /></view>
-  <view wx:elif="{{ connectError }}" class="loader">连接错误</view>
-  <view wx:elif="{{ !isConnected }}" class="loader">连接断开</view>
-  <slot wx:else></slot>
-</view>

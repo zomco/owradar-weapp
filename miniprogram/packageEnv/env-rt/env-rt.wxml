@@ -1,6 +1,0 @@
-<!--pages/heartRt/heartRt.wxml-->
-<view class="container">
-  <wsc sensor-id="{{ sensorId }}" bindopen="bindopen" bindmessage="bindmessage">
-    <ec-canvas id="rt-env-chart" canvas-id="rt-env-chart" ec="{{ ec }}" class="chart"></ec-canvas>
-  </wsc>
-</view>

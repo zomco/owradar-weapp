@@ -1,7 +1,0 @@
-<!--pages/body-rt/body-rt.wxml-->
-<view class="container">
-  <wsc sensor-id="{{ sensorId }}" bindopen="bindopen" bindmessage="bindmessage">
-    <ec-canvas id="rt-body-chart" canvas-id="rt-body-chart" ec="{{ ec }}" class="chart"></ec-canvas>
-  </wsc>
-</view>
-
