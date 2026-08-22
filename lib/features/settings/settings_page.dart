@@ -8,6 +8,7 @@ library;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/lan_reachability.dart';
 import '../../data/providers.dart';
 import '../../data/session.dart';
 import '../devices/devices_page.dart';
@@ -143,11 +144,19 @@ class _LanSettingsState extends ConsumerState<_LanSettings> {
 
   @override
   Widget build(BuildContext context) {
+    // 先判可达性再让用户填表：在 https 网页版里，这几个框填得再对也连不上，
+    // 而失败时浏览器只在控制台留一行，用户会去反复检查 Token 和防火墙。
+    final blocked = lanReachability(_host.text.trim()).isBlocked;
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          if (blocked) ...[
+            const _MixedContentNotice(),
+            const SizedBox(height: 16),
+          ],
           TextField(
             controller: _host,
             decoration: const InputDecoration(
@@ -177,6 +186,63 @@ class _LanSettingsState extends ConsumerState<_LanSettings> {
             label: const Text('保存并重连'),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// 混合内容的说明卡（见 core/lan_reachability.dart 与 OPEN-ISSUES S-14）。
+///
+/// 直接给一个「切到云端」的按钮：这是用户在网页版里唯一能走通的路，
+/// 光说明不给出路等于把人晾在原地。
+class _MixedContentNotice extends ConsumerWidget {
+  const _MixedContentNotice();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final scheme = Theme.of(context).colorScheme;
+
+    return Card(
+      key: const Key('mixed-content-notice'),
+      color: scheme.errorContainer,
+      margin: EdgeInsets.zero,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.lock_outline, color: scheme.onErrorContainer),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    lanBlockedTitle,
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                      color: scheme.onErrorContainer,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              lanBlockedExplanation,
+              style: Theme.of(
+                context,
+              ).textTheme.bodySmall?.copyWith(color: scheme.onErrorContainer),
+            ),
+            const SizedBox(height: 12),
+            Align(
+              alignment: Alignment.centerRight,
+              child: FilledButton.tonal(
+                onPressed: () =>
+                    ref.read(sessionProvider.notifier).setMode(ConnectMode.cloudOnly),
+                child: const Text('切到云端模式'),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

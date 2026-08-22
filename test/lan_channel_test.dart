@@ -19,6 +19,7 @@ import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:mmradar_app/core/lan_reachability.dart';
 import 'package:mmradar_app/data/device_channel.dart';
 import 'package:mmradar_app/data/lan_channel.dart';
 import 'package:stream_channel/stream_channel.dart';
@@ -102,6 +103,64 @@ Future<({LanChannel channel, List<_FakeSocket> sockets, List<String?> auth})> co
 }
 
 void main() {
+  group('混合内容（S-14）', () {
+    /// 造一条「跑在 https 网页版里」的通道。
+    LanChannel blockedChannel({required List<String> httpCalls}) => LanChannel(
+      host: '192.168.1.50',
+      token: 'pair-token-123',
+      httpClient: MockClient((req) async {
+        httpCalls.add(req.url.toString());
+        return _res(snapshotJson());
+      }),
+      connectWebSocket: (uri) => _FakeSocket(uri),
+      reachability: (_) => LanReachability.blockedByMixedContent,
+    );
+
+    test('不可达时立刻失败，并说明真正的原因', () async {
+      final calls = <String>[];
+      final channel = blockedChannel(httpCalls: calls);
+      final statuses = <ChannelStatus>[];
+      channel.status.listen(statuses.add);
+
+      await channel.connect();
+      await Future<void>.delayed(Duration.zero);
+
+      expect(statuses.single.state, ChannelState.failed);
+      expect(
+        statuses.single.detail,
+        lanBlockedTitle,
+        reason: '不能只说「连接失败」—— 用户会去查 Token 和防火墙',
+      );
+    });
+
+    test('一个请求都不发 —— 发了也是被浏览器拦掉', () async {
+      final calls = <String>[];
+      final channel = blockedChannel(httpCalls: calls);
+
+      await channel.connect();
+
+      expect(calls, isEmpty);
+    });
+
+    test('不安排重连 —— 重试一万次结果都一样', () async {
+      // 这条是本组里最要紧的：不拦住的话，一个连不上的网页版会以
+      // 1/2/4/8/15/30 秒的节奏永远重试下去，日志刷满、笔记本电池耗光。
+      final calls = <String>[];
+      final channel = blockedChannel(httpCalls: calls);
+      final statuses = <ChannelStatus>[];
+      channel.status.listen(statuses.add);
+
+      await channel.connect();
+      // 跨过第一档重连间隔
+      await Future<void>.delayed(const Duration(milliseconds: 1200));
+
+      expect(statuses, hasLength(1), reason: '只该有那一次 failed，没有后续的重连状态');
+      expect(calls, isEmpty);
+
+      await channel.dispose();
+    });
+  });
+
   group('订阅鉴权', () {
     test('WS 地址必须带上配对 token', () async {
       // 设备侧会拒掉不带 token 的订阅。少了这一句，

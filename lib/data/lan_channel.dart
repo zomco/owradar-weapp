@@ -14,6 +14,7 @@ import 'package:web_socket_channel/web_socket_channel.dart';
 
 import '../core/contracts/command.dart';
 import '../core/contracts/telemetry.dart';
+import '../core/lan_reachability.dart';
 import 'device_channel.dart';
 
 class LanChannel implements DeviceChannel {
@@ -23,6 +24,7 @@ class LanChannel implements DeviceChannel {
     this.port = 80,
     http.Client? httpClient,
     this.connectWebSocket = WebSocketChannel.connect,
+    this.reachability = lanReachability,
   }) : _http = httpClient ?? http.Client();
 
   final String host;
@@ -35,6 +37,10 @@ class LanChannel implements DeviceChannel {
 
   /// 注入以便单测替换掉真实连接。
   final WebSocketChannel Function(Uri) connectWebSocket;
+
+  /// 可达性判定。注入以便在测试里模拟 https 网页版的环境
+  /// —— 真跑一个 https 页面来测这条分支代价太大。
+  final LanReachability Function(String host) reachability;
 
   @override
   ChannelKind get kind => ChannelKind.lan;
@@ -90,6 +96,17 @@ class LanChannel implements DeviceChannel {
   @override
   Future<void> connect() async {
     if (_disposed) return;
+
+    // 浏览器会拦掉 https 页面发往 http 的请求（混合内容，见 S-14）。
+    // 不先判的话，用户看到的是「连接不上设备：XMLHttpRequest error」，
+    // 于是去查 Token、IP、防火墙 —— 而那些都没问题，这条路本身不通。
+    //
+    // 也不重连：重试一万次结果都一样，只会把日志刷满、把电池耗光。
+    if (reachability(host).isBlocked) {
+      _emitStatus(ChannelState.failed, lanBlockedTitle);
+      return;
+    }
+
     _emitStatus(ChannelState.connecting);
 
     // 先用 HTTP 取一次快照：WebSocket 握手可能慢，但用户希望立刻看到数据。
