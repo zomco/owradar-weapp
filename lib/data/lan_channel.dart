@@ -64,7 +64,19 @@ class LanChannel implements DeviceChannel {
   Telemetry? get latest => _latest;
 
   Uri _uri(String path) => Uri(scheme: 'http', host: host, port: port, path: path);
-  Uri _wsUri(String path) => Uri(scheme: 'ws', host: host, port: port, path: path);
+
+  /// 订阅地址。token 走查询串 —— **浏览器的 WebSocket API 不允许设置请求头**，
+  /// web 构建没有别的办法把凭证带上去（与云通道 S-12 撞的是同一堵墙）。
+  ///
+  /// 设备端两种都认，所以原生构建其实可以走请求头；这里统一用查询串，
+  /// 免得两个平台跑在不同的代码路径上 —— 那样 web 上的 bug 在原生上复现不出来。
+  Uri _wsUri(String path) => Uri(
+    scheme: 'ws',
+    host: host,
+    port: port,
+    path: path,
+    queryParameters: token.isEmpty ? null : {'token': token},
+  );
 
   Map<String, String> get _headers => {
     'Content-Type': 'application/json',
