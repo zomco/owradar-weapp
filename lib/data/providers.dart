@@ -144,6 +144,15 @@ final cloudApiProvider = Provider<CloudApi?>((ref) {
   return api;
 });
 
+/// 账号信息与日报偏好。仅云模式有意义。
+final accountProvider = FutureProvider<AccountInfo>((ref) async {
+  final api = ref.watch(cloudApiProvider);
+  if (api == null) {
+    throw const CloudException(CommandError(ErrorCode.unauthorized, '未登录'));
+  }
+  return api.account();
+}, retry: backOffThenGiveUp);
+
 /// 用户绑定的设备列表。仅云模式有意义。
 final cloudDevicesProvider = FutureProvider<List<CloudDevice>>((ref) async {
   final api = ref.watch(cloudApiProvider);

@@ -12,6 +12,7 @@ import '../../data/providers.dart';
 import '../../data/session.dart';
 import '../devices/devices_page.dart';
 import 'login_page.dart';
+import 'report_settings.dart';
 
 class SettingsPage extends ConsumerWidget {
   const SettingsPage({super.key});
@@ -232,6 +233,15 @@ class _CloudSettings extends ConsumerWidget {
           onTap: () =>
               Navigator.of(context)
                   .push(MaterialPageRoute<void>(builder: (_) => const DevicesPage())),
+        ),
+        ListTile(
+          leading: const Icon(Icons.summarize_outlined),
+          title: const Text('日报'),
+          subtitle: const Text('每天收一份前一天的回顾'),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: () => Navigator.of(context).push(
+            MaterialPageRoute<void>(builder: (_) => const ReportSettingsPage()),
+          ),
         ),
         const Padding(padding: EdgeInsets.symmetric(horizontal: 16), child: _CloudUrlField()),
         const SizedBox(height: 12),

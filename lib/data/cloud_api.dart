@@ -12,6 +12,48 @@ import 'package:http/http.dart' as http;
 import '../core/contracts/command.dart';
 import '../core/contracts/rule.dart';
 
+/// 账号信息与日报偏好。
+class AccountInfo {
+  const AccountInfo({
+    required this.email,
+    required this.plan,
+    required this.dailyReportAllowed,
+    required this.reportEnabled,
+    required this.tzOffsetMin,
+    required this.reportHour,
+  });
+
+  final String email;
+  final String plan;
+
+  /// 当前套餐是否包含日报。
+  ///
+  /// 由服务端的配额算出来，**客户端不自己判断 plan == 'pro'** ——
+  /// 那样改定价要同时改四端。
+  final bool dailyReportAllowed;
+
+  final bool reportEnabled;
+
+  /// UTC 偏移（分钟）。用分钟不是小时：尼泊尔 +345、印度 +330。
+  final int tzOffsetMin;
+
+  /// 本地发送时刻，0-23。
+  final int reportHour;
+
+  factory AccountInfo.fromJson(Map<String, Object?> j) {
+    final quota = (j['quota'] as Map?)?.cast<String, Object?>() ?? const {};
+    final report = (j['report'] as Map?)?.cast<String, Object?>() ?? const {};
+    return AccountInfo(
+      email: j['email'] as String? ?? '',
+      plan: j['plan'] as String? ?? 'free',
+      dailyReportAllowed: quota['daily_report'] as bool? ?? false,
+      reportEnabled: report['enabled'] as bool? ?? false,
+      tzOffsetMin: (report['tz_offset_min'] as num?)?.toInt() ?? 0,
+      reportHour: (report['hour'] as num?)?.toInt() ?? 8,
+    );
+  }
+}
+
 /// 云端返回的设备条目。
 class CloudDevice {
   const CloudDevice({
@@ -327,6 +369,32 @@ class CloudApi {
       refresh: refresh,
       expiresIn: (j['expires_in'] as num?)?.toInt() ?? 900,
     );
+  }
+
+  // ── 账号偏好 ────────────────────────────────────────────
+
+  Future<AccountInfo> account() async {
+    return AccountInfo.fromJson(await _get('/v1/me'));
+  }
+
+  /// 更新日报偏好。只传要改的项 —— 服务端做的是部分更新。
+  Future<AccountInfo> updateReportPrefs({
+    bool? enabled,
+    int? tzOffsetMin,
+    int? hour,
+  }) async {
+    final body = <String, Object?>{
+      'report_enabled': ?enabled,
+      'tz_offset_min': ?tzOffsetMin,
+      'report_hour': ?hour,
+    };
+    if (body.isEmpty) {
+      throw const CloudException(CommandError(ErrorCode.invalidParam, '没有要更新的项'));
+    }
+    // PATCH 只回 report 段，其余字段从这次请求里拿不到 ——
+    // 重新拉一次完整账号，免得界面上的套餐信息变成空的
+    await _send('PATCH', '/v1/me', body);
+    return account();
   }
 
   // ── 设备 ────────────────────────────────────────────────
