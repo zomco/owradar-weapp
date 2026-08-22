@@ -198,5 +198,4 @@ App 会提前检测并直说，而不是让用户对着一个笼统的网络错�
 - mDNS 自动发现 `_mmradar._tcp`
 - token 的安全存储：现在用 `SharedPreferences`，web 上没有 Keychain 等价物；
   原生构建上线前应换 `flutter_secure_storage`
-- 目标区域引导式标定 —— 「距离门」这个概念不该暴露给用户
 - 本地通知 / FCM / APNs

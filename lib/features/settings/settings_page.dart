@@ -14,6 +14,7 @@ import '../../data/session.dart';
 import '../devices/devices_page.dart';
 import 'login_page.dart';
 import 'report_settings.dart';
+import 'zone_calibration.dart';
 
 class SettingsPage extends ConsumerWidget {
   const SettingsPage({super.key});
@@ -42,6 +43,21 @@ class SettingsPage extends ConsumerWidget {
             const _SectionHeader('云账号'),
             _CloudSettings(session: session),
           ],
+
+          const Divider(height: 1),
+          const _SectionHeader('设备'),
+          ListTile(
+            key: const Key('zone-calibration-entry'),
+            leading: const Icon(Icons.my_location),
+            title: const Text('标定工位'),
+            // 说「工位」不说「距离门」：用户要表达的是「我平时坐这儿」，
+            // 而不是一个以厘米为单位的区间。
+            subtitle: const Text('让设备记住你平时坐的位置，路过的人就不会被算成在座'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(builder: (_) => const ZoneCalibrationPage()),
+            ),
+          ),
 
           const Divider(height: 1),
           const _SectionHeader('关于'),
