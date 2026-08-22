@@ -190,7 +190,26 @@ HTTP，因此**由 https 域名提供的网页版无法直连局域网设备** �
 （浏览器视环回为潜在可信），所以隧道到本机的用法仍然可用。
 
 App 会提前检测并直说，而不是让用户对着一个笼统的网络错误去查 Token 和防火墙。
-判定在 `lib/core/lan_reachability.dart`。产品层面怎么收口见工作区 OPEN-ISSUES S-14。
+判定在 `lib/core/lan_reachability.dart`。
+
+### 想要「不装 App 且不走云」：自托管
+
+按 [ADR-0009](../../docs/adr/0009-web-lan-access.md)，web 版另发一份可自托管的
+产物。在工作区根目录：
+
+```bash
+npm run app:package
+```
+
+产物是 `dist/mmradar-web-selfhost-<版本>.zip`（约 14MB）。解压后用任意静态
+服务器提供，例如 `python -m http.server 8080`，然后从同一局域网的浏览器打开
+`http://<这台机器的IP>:8080`。
+
+> ⚠️ **必须用 http 提供。** 套上 https 反代的话，局域网模式会以完全相同的
+> 方式再次失效，而且更难查 —— 因为「我明明自托管了」。这句话也放进了 zip 里。
+
+设备那边不需要任何配置：默认放行来自局域网的页面（RFC1918 私网段、`169.254`、
+`.local`），公网来源仍一律拒绝。
 
 ## 10. 尚未实现
 
