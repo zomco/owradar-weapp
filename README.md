@@ -174,7 +174,25 @@ GET  /v1/devices/:id/stream?ticket=  →  101
 **WS 的 URL 里不许出现 access token**。当初那个 bug 之所以没被测出来，
 就是因为没人断言过 URL 是怎么拼的。
 
-## 9. 尚未实现
+## 9. 网页版连不上局域网设备
+
+浏览器禁止 https 页面向 http 发请求（混合内容）。设备的局域网 API 是明文
+HTTP，因此**由 https 域名提供的网页版无法直连局域网设备** —— 这条在设备端
+无解，与 CORS、Token、防火墙都没有关系。
+
+| 构建 | 局域网直连 |
+|---|---|
+| 原生 Android / iOS / 桌面 | ✅ |
+| 网页版，页面走 http（`flutter run -d chrome`、自建内网面板） | ✅ |
+| 网页版，页面走 https（线上域名） | ❌ 只能走云 |
+
+例外：https 页面访问 `localhost` / `127.0.0.0/8` / `::1` **不算**混合内容
+（浏览器视环回为潜在可信），所以隧道到本机的用法仍然可用。
+
+App 会提前检测并直说，而不是让用户对着一个笼统的网络错误去查 Token 和防火墙。
+判定在 `lib/core/lan_reachability.dart`。产品层面怎么收口见工作区 OPEN-ISSUES S-14。
+
+## 10. 尚未实现
 
 - **BLE 配网**（`flutter_blue_plus`，需 Android SDK）—— 见契约 §9.4
 - mDNS 自动发现 `_mmradar._tcp`
