@@ -90,6 +90,13 @@ class SessionNotifier extends Notifier<Session> {
 
   Future<void> signOut() => update(state.copyWith(clearAuth: true, clearDevice: true));
 
+  /// 令牌刷新后落盘。
+  ///
+  /// 只动令牌，不碰 mode / deviceId —— 刷新是后台行为，
+  /// 不该把用户正在看的设备切掉。
+  Future<void> updateTokens(String access, String refresh) =>
+      update(state.copyWith(accessToken: access, refreshToken: refresh));
+
   Future<void> selectDevice(String deviceId) => update(state.copyWith(deviceId: deviceId));
 }
 
@@ -116,7 +123,23 @@ final cloudApiProvider = Provider<CloudApi?>((ref) {
   final s = ref.watch(sessionProvider);
   if (s.mode != ConnectMode.cloudOnly || !s.isLoggedIn) return null;
 
-  final api = CloudApi(baseUrl: s.cloudBaseUrl, accessToken: s.accessToken);
+  final api = CloudApi(
+    baseUrl: s.cloudBaseUrl,
+    accessToken: s.accessToken,
+    refreshToken: s.refreshToken,
+    // access token 只有 15 分钟。没有这两个回调的话，用户开着界面
+    // 一刻钟就会莫名其妙全部报错，而错误信息只说「未授权」。
+    onTokensRefreshed: (tokens) {
+      // 不用 ref.read(...notifier)：这里可能在 Provider 已被 dispose
+      // 之后回调（请求还在飞），那时候读 notifier 会抛。
+      if (!ref.mounted) return;
+      ref.read(sessionProvider.notifier).updateTokens(tokens.access, tokens.refresh);
+    },
+    onSessionExpired: () {
+      if (!ref.mounted) return;
+      ref.read(sessionProvider.notifier).signOut();
+    },
+  );
   ref.onDispose(api.close);
   return api;
 });

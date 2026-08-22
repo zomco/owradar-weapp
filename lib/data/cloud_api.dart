@@ -112,8 +112,14 @@ class CloudException implements Exception {
 }
 
 class CloudApi {
-  CloudApi({required this.baseUrl, http.Client? client, this.accessToken})
-    : _http = client ?? http.Client();
+  CloudApi({
+    required this.baseUrl,
+    http.Client? client,
+    this.accessToken,
+    this.refreshToken,
+    this.onTokensRefreshed,
+    this.onSessionExpired,
+  }) : _http = client ?? http.Client();
 
   final String baseUrl;
   final http.Client _http;
@@ -121,6 +127,26 @@ class CloudApi {
   /// 访问令牌。刷新会话后由外部直接改写 —— 不重建 CloudApi，
   /// 免得把正在进行的请求和它持有的 http.Client 一起丢掉。
   String? accessToken;
+
+  /// 刷新令牌。access token 只有 15 分钟，没有它用户每刷一次界面就要重新登录。
+  String? refreshToken;
+
+  /// 刷新成功后回调，把新的一对令牌交给上层持久化。
+  ///
+  /// **必须存下来**：服务端每次刷新都发新的 refresh token，
+  /// 虽然旧的目前还有效，但不该依赖这个实现细节。
+  final void Function(AuthTokens tokens)? onTokensRefreshed;
+
+  /// 刷新失败（refresh token 也过期或无效）时回调。
+  /// 上层应当据此清掉会话并把用户送回登录页。
+  final void Function()? onSessionExpired;
+
+  /// 正在进行的刷新。
+  ///
+  /// 单飞：界面上多个 Provider 会同时发请求，token 一过期就是一片 401。
+  /// 不合并的话会同时打出 N 个刷新请求，而且它们的结果互相覆盖，
+  /// 最后存下哪一对是随机的。
+  Future<bool>? _refreshing;
 
   Uri _uri(String path, [Map<String, String>? query]) =>
       Uri.parse('$baseUrl$path').replace(queryParameters: query);
@@ -168,7 +194,56 @@ class CloudApi {
     throw CloudException(CommandError(code, 'HTTP ${res.statusCode}'));
   }
 
-  Future<Map<String, Object?>> _get(String path, [Map<String, String>? query]) async {
+  /// 刷新一次令牌。并发调用共享同一次网络请求。
+  ///
+  /// 成功返回 true 并已把新的 accessToken 装好；失败返回 false 并通知上层。
+  Future<bool> _refresh() {
+    // 已经有人在刷了就等它，不再发一次
+    final inFlight = _refreshing;
+    if (inFlight != null) return inFlight;
+
+    final token = refreshToken;
+    if (token == null || token.isEmpty) {
+      onSessionExpired?.call();
+      return Future.value(false);
+    }
+
+    final future = () async {
+      try {
+        final tokens = await refreshSession(token);
+        refreshToken = tokens.refresh;
+        onTokensRefreshed?.call(tokens);
+        return true;
+      } on CloudException {
+        // refresh token 也不行了 —— 重试没有意义，让用户重新登录
+        onSessionExpired?.call();
+        return false;
+      } finally {
+        _refreshing = null;
+      }
+    }();
+
+    _refreshing = future;
+    return future;
+  }
+
+  /// 执行一次请求；遇到 401 就刷新令牌并**只重试一次**。
+  ///
+  /// 只重试一次是关键：刷新完还 401 说明问题不在令牌上
+  /// （比如访问了别人的设备），再试下去就是死循环。
+  Future<Map<String, Object?>> _withAuthRetry(
+    Future<Map<String, Object?>> Function() op,
+  ) async {
+    try {
+      return await op();
+    } on CloudException catch (e) {
+      if (e.error.code != ErrorCode.unauthorized) rethrow;
+      if (!await _refresh()) rethrow;
+      return op();
+    }
+  }
+
+  Future<Map<String, Object?>> _rawGet(String path, [Map<String, String>? query]) async {
     try {
       final res = await _http
           .get(_uri(path, query), headers: _headers())
@@ -181,7 +256,22 @@ class CloudApi {
     }
   }
 
+  Future<Map<String, Object?>> _get(String path, [Map<String, String>? query]) =>
+      _withAuthRetry(() => _rawGet(path, query));
+
   Future<Map<String, Object?>> _send(
+    String method,
+    String path,
+    Object? body, {
+    bool auth = true,
+  }) {
+    // auth=false 的只有登录与刷新本身。它们不能走重试包装 ——
+    // 刷新接口自己返回 401 时再去刷新就是无限递归。
+    if (!auth) return _rawSend(method, path, body, auth: false);
+    return _withAuthRetry(() => _rawSend(method, path, body, auth: true));
+  }
+
+  Future<Map<String, Object?>> _rawSend(
     String method,
     String path,
     Object? body, {
@@ -321,7 +411,13 @@ class CloudApi {
   ///
   /// 返回原始 JSON 而不是 CommandResult：解析交给 [CloudChannel]，
   /// 这样 REST 客户端不必依赖通道层的类型。
-  Future<Map<String, Object?>> rawCommand(String deviceId, Map<String, Object?> command) async {
+  Future<Map<String, Object?>> rawCommand(String deviceId, Map<String, Object?> command) =>
+      _withAuthRetry(() => _rawCommand(deviceId, command));
+
+  Future<Map<String, Object?>> _rawCommand(
+    String deviceId,
+    Map<String, Object?> command,
+  ) async {
     try {
       final res = await _http
           .post(

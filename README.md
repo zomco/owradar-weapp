@@ -108,7 +108,7 @@ UI 统一用 `asyncView()` 而不是 `.when()`，它把错误分支排在加载�
 
 ```bash
 flutter analyze   # 零告警（strict-casts / strict-inference / strict-raw-types）
-flutter test      # 88 项
+flutter test      # 96 项
 ```
 
 | 文件 | 覆盖 |
@@ -118,6 +118,7 @@ flutter test      # 88 项
 | `test/rules_test.dart` | 规则模板的去抖/滞回/冷却约束、人话渲染、规则界面 |
 | `test/cloud_api_test.dart` | 与 mmradar-server 的**线格式**：路径、字段名、鉴权头、错误码 |
 | `test/cloud_channel_test.dart` | WS 握手与票据鉴权、帧解析容错 |
+| `test/token_refresh_test.dart` | 令牌过期后的自动刷新，重点是并发合并 |
 | `test/cloud_ui_test.dart` | 设备列表、历史曲线、设置页 |
 
 widget 测试重点覆盖各 health 状态的渲染，因为
@@ -176,7 +177,6 @@ GET  /v1/devices/:id/stream?ticket=  →  101
 
 - **BLE 配网**（`flutter_blue_plus`，需 Android SDK）—— 见契约 §9.4
 - mDNS 自动发现 `_mmradar._tcp`
-- access token 过期后的自动刷新（`CloudApi.refreshSession` 已就绪，尚未接进 `SessionNotifier`）
 - token 的安全存储：现在用 `SharedPreferences`，web 上没有 Keychain 等价物；
   原生构建上线前应换 `flutter_secure_storage`
 - 目标区域引导式标定 —— 「距离门」这个概念不该暴露给用户
