@@ -7,67 +7,16 @@
 /// 「传感器坏了」和「数值正常」。
 library;
 
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mmradar_app/core/contracts/command.dart';
 import 'package:mmradar_app/core/contracts/telemetry.dart';
 import 'package:mmradar_app/data/device_channel.dart';
 import 'package:mmradar_app/data/providers.dart';
 import 'package:mmradar_app/features/dashboard/dashboard_page.dart';
 
 import 'contracts_test.dart' show snapshotJson;
-
-/// 受控的假通道。测试直接往里推快照与告警。
-class FakeChannel implements DeviceChannel {
-  FakeChannel({Telemetry? initial}) : _latest = initial;
-
-  final _telemetry = StreamController<Telemetry>.broadcast();
-  final _alerts = StreamController<Alert>.broadcast();
-  final _status = StreamController<ChannelStatus>.broadcast();
-  Telemetry? _latest;
-
-  final sentCommands = <String>[];
-
-  void push(Telemetry t) {
-    _latest = t;
-    _telemetry.add(t);
-  }
-
-  void pushAlert(Alert a) => _alerts.add(a);
-  void pushStatus(ChannelState s) => _status.add(ChannelStatus(ChannelKind.lan, s));
-
-  @override
-  ChannelKind get kind => ChannelKind.lan;
-  @override
-  Stream<Telemetry> get telemetry => _telemetry.stream;
-  @override
-  Stream<Alert> get alerts => _alerts.stream;
-  @override
-  Stream<ChannelStatus> get status => _status.stream;
-  @override
-  Telemetry? get latest => _latest;
-
-  @override
-  Future<void> connect() async {}
-  @override
-  Future<void> disconnect() async {}
-
-  @override
-  Future<CommandResult> send(CommandRequest request) async {
-    sentCommands.add(request.cmd);
-    return const CommandOk(null);
-  }
-
-  @override
-  Future<void> dispose() async {
-    await _telemetry.close();
-    await _alerts.close();
-    await _status.close();
-  }
-}
+import 'fake_channel.dart';
 
 Future<FakeChannel> pumpDashboard(WidgetTester tester, Telemetry initial) async {
   final fake = FakeChannel(initial: initial);

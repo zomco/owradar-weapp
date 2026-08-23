@@ -122,6 +122,7 @@ flutter test      # 107 项
 | `test/report_settings_test.dart` | 日报/周报设置；能不能用由服务端配额决定 |
 | `test/secret_store_test.dart` | 凭证与偏好分开存；旧数据迁移不把用户登出 |
 | `test/lan_channel_test.dart` | 订阅带 token；设备端历史的列转点与 null 保留 |
+| `test/threshold_profile_test.dart` | 地区档：选地区而非标准号；换档前必须确认 |
 | `test/cloud_ui_test.dart` | 设备列表、历史曲线、设置页 |
 
 widget 测试重点覆盖各 health 状态的渲染，因为

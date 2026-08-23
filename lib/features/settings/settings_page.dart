@@ -14,6 +14,7 @@ import '../../data/session.dart';
 import '../devices/devices_page.dart';
 import 'login_page.dart';
 import 'report_settings.dart';
+import 'threshold_profile.dart';
 import 'zone_calibration.dart';
 
 class SettingsPage extends ConsumerWidget {
@@ -56,6 +57,19 @@ class SettingsPage extends ConsumerWidget {
             trailing: const Icon(Icons.chevron_right),
             onTap: () => Navigator.of(context).push(
               MaterialPageRoute<void>(builder: (_) => const ZoneCalibrationPage()),
+            ),
+          ),
+
+          ListTile(
+            key: const Key('threshold-profile-entry'),
+            leading: const Icon(Icons.public),
+            title: const Text('分级标准'),
+            // 说地区不说标准名：没人知道 EN 16798-1 是什么，
+            // 但每个人都知道自己在哪
+            subtitle: const Text('按你所在的地区决定「多少算超标」'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(builder: (_) => const ThresholdProfilePage()),
             ),
           ),
 

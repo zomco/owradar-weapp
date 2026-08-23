@@ -234,6 +234,25 @@ final rulesProvider = FutureProvider<List<Rule>>((ref) async {
   }
 }, retry: backOffThenGiveUp);
 
+/// 设备当前采用的地区标准档（契约 §8.1）。
+///
+/// 从 get_config 读而不是让客户端猜 —— 猜的话，用户改过阈值之后
+/// 界面会选中一个看着最像的档，而那不是他选的那个。
+final thresholdProfileProvider = FutureProvider<String>((ref) async {
+  final channel = ref.watch(channelProvider);
+  final result = await channel.getConfig();
+
+  switch (result) {
+    case CommandFailed(:final error):
+      throw Exception(error.display);
+    case CommandOk(:final result):
+      final cfg = result is Map ? result.cast<String, Object?>() : const <String, Object?>{};
+      // 老固件没有这个字段。退回 international 而不是抛异常 ——
+      // 设置项显示成默认值，比整页报错好。
+      return cfg['threshold_profile'] as String? ?? 'international';
+  }
+}, retry: backOffThenGiveUp);
+
 // ── 历史 ──────────────────────────────────────────────────
 
 /// 历史查询的时间跨度（秒）。由历史页写入。

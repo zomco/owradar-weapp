@@ -94,6 +94,13 @@ extension DeviceCommands on DeviceChannel {
   Future<CommandResult> setZone({required int minCm, required int maxCm}) =>
       send(CommandRequest('set_zone', params: {'min_cm': minCm, 'max_cm': maxCm}));
 
+  /// 切换地区标准档（契约 §8.1）。
+  ///
+  /// **会整体重置五项阈值**，不做合并 —— 半套 EN、半套 GB 拼出来的分级
+  /// 没有任何标准背书，而用户以为自己选的是「欧盟」。
+  Future<CommandResult> setThresholdProfile(String profile) =>
+      send(CommandRequest('set_profile', params: {'profile': profile}));
+
   /// 户外新鲜空气约 420ppm。
   Future<CommandResult> calibrateCo2({int referencePpm = 420}) =>
       send(CommandRequest('calibrate_co2', params: {'reference_ppm': referencePpm}));
