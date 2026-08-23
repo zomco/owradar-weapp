@@ -73,6 +73,9 @@ class SessionNotifier extends Notifier<Session> {
   }
 
   Future<void> _restore() async {
+    // 迁移必须在 load 之前：旧版本把凭证放在 SharedPreferences 里，
+    // 不先搬过来的话，升级上来的用户会莫名其妙被登出一次。
+    await _store.migrateLegacySecrets();
     state = await _store.load();
   }
 

@@ -120,6 +120,7 @@ flutter test      # 107 项
 | `test/cloud_channel_test.dart` | WS 握手与票据鉴权、帧解析容错 |
 | `test/token_refresh_test.dart` | 令牌过期后的自动刷新，重点是并发合并 |
 | `test/report_settings_test.dart` | 日报/周报设置；能不能用由服务端配额决定 |
+| `test/secret_store_test.dart` | 凭证与偏好分开存；旧数据迁移不把用户登出 |
 | `test/cloud_ui_test.dart` | 设备列表、历史曲线、设置页 |
 
 widget 测试重点覆盖各 health 状态的渲染，因为
@@ -211,10 +212,38 @@ npm run app:package
 设备那边不需要任何配置：默认放行来自局域网的页面（RFC1918 私网段、`169.254`、
 `.local`），公网来源仍一律拒绝。
 
-## 10. 尚未实现
+## 10. 凭证存储
+
+**凭证与普通偏好分开存**（`lib/data/secret_store.dart`）。分开不只是为了
+原生上那点保护，更是为了让「哪些东西是凭证」在代码里有个明确的位置 ——
+混在一起的话，没有任何机制阻止下一个人往普通偏好里再塞一个 token。
+
+| 平台 | 实现 | 保护 |
+|---|---|---|
+| Android | Keystore 包裹的 AES-GCM | 操作系统级，别的应用读不到 |
+| iOS | Keychain（`first_unlock`） | 同上 |
+| Web | localStorage，**不加密** | **没有**。同源脚本都能读 |
+
+Web 上刻意**不用** `flutter_secure_storage` 的 web 实现：它加密后把密钥
+存在同一个 localStorage 里，看起来更安全而实际不是。用一个明摆着不安全的
+实现，好过一个假装安全的 —— 后者会让人以为这里已经处理好了，
+从而不去做真正有用的缓解。
+
+Web 的缓解手段在**服务端**：access token 15 分钟过期，refresh token
+一次一换。被盗的 refresh token 一旦被正主用过就作废。
+
+升级路径：旧版本把凭证放在 `SharedPreferences`，启动时会自动搬进安全存储
+**并删掉明文那份**。只搬不删等于白搬。不搬的话，升级上来的用户会莫名其妙
+被登出一次，而且没有任何报错能解释。
+
+> ⚠️ **原生路径未经验证**：本机没有 Android SDK（见工作区 OPEN-ISSUES S-11），
+> 也没有 macOS，所以 Keystore / Keychain 这两条只通过了编译期检查与
+> 用假实现跑的单元测试，**没有在真机上读写过**。首次原生构建时要专门验一遍。
+
+## 11. 尚未实现
 
 - **BLE 配网**（`flutter_blue_plus`，需 Android SDK）—— 见契约 §9.4
 - mDNS 自动发现 `_mmradar._tcp`
-- token 的安全存储：现在用 `SharedPreferences`，web 上没有 Keychain 等价物；
-  原生构建上线前应换 `flutter_secure_storage`
+- 局域网端点（地址与配对 Token）**不持久化** —— 现在只存在内存里，
+  重启 App 要重填。设置页的「保存并重连」只对本次运行有效
 - 本地通知 / FCM / APNs
