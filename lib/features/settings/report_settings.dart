@@ -1,8 +1,12 @@
-/// 日报设置。
+/// 定期报告的设置：日报与周报。
 ///
-/// 服务端每天在**用户本地**的指定时刻推一份昨天的回顾。
-/// 时区必须由用户确认而不是由服务端猜 —— 猜错的后果是
-/// 每天在凌晨收到一份关于昨天工位的报告。
+/// 服务端在**用户本地**的指定时刻推送。时区必须由用户确认而不是
+/// 由服务端猜 —— 猜错的后果是每天在凌晨收到一份关于昨天工位的报告。
+///
+/// 日报与周报是两个独立开关，共用同一个发送时刻和同一个配额位：
+/// 它们回答不同的问题（昨天怎么样 / 这周比上周如何），
+/// 绑一起的话想关周报的用户只能连日报一起关掉；
+/// 而让用户为周报再设一遍「早上 8 点」纯属多余。
 library;
 
 import 'package:flutter/material.dart';
@@ -18,7 +22,7 @@ class ReportSettingsPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return Scaffold(
-      appBar: AppBar(title: const Text('日报')),
+      appBar: AppBar(title: const Text('定期报告')),
       body: asyncView(
         ref.watch(accountProvider),
         error: (e) => _Error(
@@ -42,14 +46,24 @@ class _Body extends ConsumerStatefulWidget {
 class _BodyState extends ConsumerState<_Body> {
   bool _busy = false;
 
-  Future<void> _save({bool? enabled, int? tzOffsetMin, int? hour}) async {
+  Future<void> _save({
+    bool? enabled,
+    bool? weeklyEnabled,
+    int? tzOffsetMin,
+    int? hour,
+  }) async {
     final api = ref.read(cloudApiProvider);
     if (api == null) return;
 
     final messenger = ScaffoldMessenger.of(context);
     setState(() => _busy = true);
     try {
-      await api.updateReportPrefs(enabled: enabled, tzOffsetMin: tzOffsetMin, hour: hour);
+      await api.updateReportPrefs(
+        enabled: enabled,
+        weeklyEnabled: weeklyEnabled,
+        tzOffsetMin: tzOffsetMin,
+        hour: hour,
+      );
       ref.invalidate(accountProvider);
     } on CloudException catch (e) {
       messenger.showSnackBar(SnackBar(content: Text(e.error.display)));
@@ -74,10 +88,11 @@ class _BodyState extends ConsumerState<_Body> {
             children: [
               const Icon(Icons.summarize_outlined, size: 48),
               const SizedBox(height: 12),
-              Text('日报是付费版功能', style: theme.textTheme.titleMedium),
+              Text('定期报告是付费版功能', style: theme.textTheme.titleMedium),
               const SizedBox(height: 6),
               Text(
-                '每天早上收到一份昨天的回顾：坐了多久、空气怎么样、触发过哪些提醒。',
+                '日报是昨天的回顾：坐了多久、空气怎么样、触发过哪些提醒。\n'
+                '周报只讲跨天才看得出的事：比上周多坐了多久、哪天空气最差。',
                 textAlign: TextAlign.center,
                 style: theme.textTheme.bodySmall,
               ),
@@ -87,39 +102,53 @@ class _BodyState extends ConsumerState<_Body> {
       );
     }
 
+    // 发送时刻与时区对两种报告都生效，所以任一开着就该能改。
+    // 只看日报的话，只开周报的用户会发现时区是灰的、改不了。
+    final anyEnabled = a.reportEnabled || a.weeklyReportEnabled;
+
     return ListView(
       children: [
         SwitchListTile(
+          key: const Key('daily-report-switch'),
           value: a.reportEnabled,
           onChanged: _busy ? null : (v) => _save(enabled: v),
           title: const Text('每天发一份回顾'),
           subtitle: const Text('内容是前一天的在座时长、空气与提醒次数'),
         ),
+
+        SwitchListTile(
+          key: const Key('weekly-report-switch'),
+          value: a.weeklyReportEnabled,
+          onChanged: _busy ? null : (v) => _save(weeklyEnabled: v),
+          title: const Text('每周一发一份总结'),
+          // 说清楚它和日报不重复，否则用户会以为这只是「日报 ×7」
+          subtitle: const Text('只讲跨天才看得出的事：比上周多坐了多久、哪天空气最差'),
+        ),
         const Divider(height: 1),
 
         ListTile(
-          enabled: a.reportEnabled && !_busy,
+          enabled: anyEnabled && !_busy,
           leading: const Icon(Icons.schedule),
           title: const Text('发送时刻'),
-          subtitle: Text('每天 ${a.reportHour.toString().padLeft(2, '0')}:00（你所在时区）'),
+          subtitle: Text('${a.reportHour.toString().padLeft(2, '0')}:00（你所在时区）'),
           trailing: const Icon(Icons.chevron_right),
-          onTap: a.reportEnabled && !_busy ? () => _pickHour(a.reportHour) : null,
+          onTap: anyEnabled && !_busy ? () => _pickHour(a.reportHour) : null,
         ),
 
         ListTile(
-          enabled: a.reportEnabled && !_busy,
+          enabled: anyEnabled && !_busy,
           leading: const Icon(Icons.public),
           title: const Text('时区'),
           subtitle: Text(_tzLabel(a.tzOffsetMin)),
           trailing: const Icon(Icons.chevron_right),
-          onTap: a.reportEnabled && !_busy ? () => _pickTimezone(a.tzOffsetMin) : null,
+          onTap: anyEnabled && !_busy ? () => _pickTimezone(a.tzOffsetMin) : null,
         ),
 
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 20, 16, 8),
           child: Text(
-            '时区决定日报在你本地的几点送达。设错的话，一份关于昨天工位的回顾'
-            '可能在凌晨把你吵醒。',
+            '时区决定报告在你本地的几点送达。设错的话，一份关于昨天工位的回顾'
+            '可能在凌晨把你吵醒。周报固定在周一发。',
             style: theme.textTheme.bodySmall,
           ),
         ),
@@ -133,7 +162,7 @@ class _BodyState extends ConsumerState<_Body> {
     final picked = await showDialog<int>(
       context: context,
       builder: (ctx) => SimpleDialog(
-        title: const Text('每天几点发'),
+        title: const Text('几点发'),
         children: [
           for (final h in const [6, 7, 8, 9, 10, 12, 18, 20, 21, 22])
             SimpleDialogOption(

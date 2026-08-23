@@ -318,8 +318,8 @@ class _CloudSettings extends ConsumerWidget {
         ),
         ListTile(
           leading: const Icon(Icons.summarize_outlined),
-          title: const Text('日报'),
-          subtitle: const Text('每天收一份前一天的回顾'),
+          title: const Text('定期报告'),
+          subtitle: const Text('每天的回顾、每周的总结'),
           trailing: const Icon(Icons.chevron_right),
           onTap: () => Navigator.of(context).push(
             MaterialPageRoute<void>(builder: (_) => const ReportSettingsPage()),
