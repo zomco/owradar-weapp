@@ -65,7 +65,7 @@ lib/
     ├── history/      历史曲线
     ├── rules/        提醒规则
     ├── devices/      设备列表与配对
-    └── settings/     连接方式、账号、日报
+    └── settings/     连接方式、账号、定期报告、工位标定
 ```
 
 **UI 不知道数据来自局域网还是云。** 这是 `DeviceChannel` 存在的全部意义：
@@ -119,7 +119,7 @@ flutter test      # 107 项
 | `test/cloud_api_test.dart` | 与 mmradar-server 的**线格式**：路径、字段名、鉴权头、错误码 |
 | `test/cloud_channel_test.dart` | WS 握手与票据鉴权、帧解析容错 |
 | `test/token_refresh_test.dart` | 令牌过期后的自动刷新，重点是并发合并 |
-| `test/report_settings_test.dart` | 日报设置页；能不能用由服务端配额决定 |
+| `test/report_settings_test.dart` | 日报/周报设置；能不能用由服务端配额决定 |
 | `test/cloud_ui_test.dart` | 设备列表、历史曲线、设置页 |
 
 widget 测试重点覆盖各 health 状态的渲染，因为

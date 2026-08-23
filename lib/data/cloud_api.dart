@@ -19,6 +19,7 @@ class AccountInfo {
     required this.plan,
     required this.dailyReportAllowed,
     required this.reportEnabled,
+    required this.weeklyReportEnabled,
     required this.tzOffsetMin,
     required this.reportHour,
   });
@@ -34,6 +35,13 @@ class AccountInfo {
 
   final bool reportEnabled;
 
+  /// 周报开关。与日报**分开**：两者回答不同的问题
+  /// （昨天怎么样 / 这周比上周如何），绑一起的话想关周报的用户
+  /// 只能连日报一起关掉。
+  ///
+  /// 与日报共用同一个配额位与发送时刻 —— 没有单独的「周报配额」。
+  final bool weeklyReportEnabled;
+
   /// UTC 偏移（分钟）。用分钟不是小时：尼泊尔 +345、印度 +330。
   final int tzOffsetMin;
 
@@ -48,6 +56,7 @@ class AccountInfo {
       plan: j['plan'] as String? ?? 'free',
       dailyReportAllowed: quota['daily_report'] as bool? ?? false,
       reportEnabled: report['enabled'] as bool? ?? false,
+      weeklyReportEnabled: report['weekly_enabled'] as bool? ?? false,
       tzOffsetMin: (report['tz_offset_min'] as num?)?.toInt() ?? 0,
       reportHour: (report['hour'] as num?)?.toInt() ?? 8,
     );
@@ -380,11 +389,13 @@ class CloudApi {
   /// 更新日报偏好。只传要改的项 —— 服务端做的是部分更新。
   Future<AccountInfo> updateReportPrefs({
     bool? enabled,
+    bool? weeklyEnabled,
     int? tzOffsetMin,
     int? hour,
   }) async {
     final body = <String, Object?>{
       'report_enabled': ?enabled,
+      'weekly_report_enabled': ?weeklyEnabled,
       'tz_offset_min': ?tzOffsetMin,
       'report_hour': ?hour,
     };

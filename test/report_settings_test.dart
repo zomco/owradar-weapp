@@ -28,13 +28,19 @@ Map<String, Object?> _account({
   String plan = 'pro',
   bool allowed = true,
   bool enabled = true,
+  bool weekly = false,
   int tz = 0,
   int hour = 8,
 }) => {
   'email': 'a@b.test',
   'plan': plan,
   'quota': {'daily_report': allowed, 'max_devices': 1, 'history_days': 7},
-  'report': {'enabled': enabled, 'tz_offset_min': tz, 'hour': hour},
+  'report': {
+    'enabled': enabled,
+    'weekly_enabled': weekly,
+    'tz_offset_min': tz,
+    'hour': hour,
+  },
 };
 
 CloudApi _api(Map<String, Object?> account, {List<http.Request>? log}) => CloudApi(
@@ -88,25 +94,58 @@ void main() {
     testWidgets('套餐不含日报时说清原因，不显示一堆点不动的控件', (tester) async {
       await _pump(tester, _scope(_account(plan: 'free', allowed: false)));
 
-      expect(find.text('日报是付费版功能'), findsOneWidget);
+      expect(find.text('定期报告是付费版功能'), findsOneWidget);
       expect(find.byType(SwitchListTile), findsNothing);
     });
 
-    testWidgets('可用时显示开关与时刻、时区', (tester) async {
+    testWidgets('可用时显示两个开关与时刻、时区', (tester) async {
       await _pump(tester, _scope(_account(hour: 9, tz: 480)));
 
-      expect(find.byType(SwitchListTile), findsOneWidget);
+      expect(find.byKey(const Key('daily-report-switch')), findsOneWidget);
+      expect(find.byKey(const Key('weekly-report-switch')), findsOneWidget);
       expect(find.textContaining('09:00'), findsOneWidget);
       expect(find.textContaining('UTC+8:00'), findsOneWidget);
     });
 
-    testWidgets('关掉之后下面的项变灰', (tester) async {
-      await _pump(tester, _scope(_account(enabled: false)));
+    testWidgets('两个都关掉之后时刻与时区才变灰', (tester) async {
+      await _pump(tester, _scope(_account(enabled: false, weekly: false)));
 
       final hourTile = tester.widget<ListTile>(
         find.ancestor(of: find.text('发送时刻'), matching: find.byType(ListTile)),
       );
       expect(hourTile.enabled, isFalse);
+    });
+
+    testWidgets('只开周报时时刻与时区仍可改', (tester) async {
+      // 时刻与时区对两种报告都生效。只看日报开关的话，
+      // 只开周报的用户会发现时区是灰的、改不了 —— 而它明明在起作用。
+      await _pump(tester, _scope(_account(enabled: false, weekly: true)));
+
+      for (final label in ['发送时刻', '时区']) {
+        final tile = tester.widget<ListTile>(
+          find.ancestor(of: find.text(label), matching: find.byType(ListTile)),
+        );
+        expect(tile.enabled, isTrue, reason: '$label 应当可改');
+      }
+    });
+
+    testWidgets('周报的说明讲清它和日报不重复', (tester) async {
+      // 不说的话用户会以为周报只是「日报 ×7」，然后关掉它
+      await _pump(tester, _scope(_account()));
+      expect(find.textContaining('跨天'), findsOneWidget);
+    });
+
+    testWidgets('两个开关互相独立', (tester) async {
+      await _pump(tester, _scope(_account(enabled: true, weekly: false)));
+
+      final daily = tester.widget<SwitchListTile>(
+        find.byKey(const Key('daily-report-switch')),
+      );
+      final weekly = tester.widget<SwitchListTile>(
+        find.byKey(const Key('weekly-report-switch')),
+      );
+      expect(daily.value, isTrue);
+      expect(weekly.value, isFalse);
     });
 
     testWidgets('把时区设错的后果要写在界面上', (tester) async {
@@ -148,6 +187,43 @@ void main() {
 
       final patch = log.firstWhere((r) => r.method == 'PATCH');
       expect(jsonDecode(patch.body), {'report_hour': 20});
+    });
+
+    test('周报开关用服务端认的字段名', () async {
+      // 字段名打错的话请求照样 200，开关却纹丝不动 —— 只有对着
+      // 真服务端手点才会发现。这里把线上格式钉住。
+      final log = <http.Request>[];
+      final api = CloudApi(
+        baseUrl: 'http://x',
+        accessToken: 'T',
+        client: MockClient((req) async {
+          log.add(req);
+          return _res(_account(weekly: true));
+        }),
+      );
+
+      await api.updateReportPrefs(weeklyEnabled: true);
+
+      final patch = log.firstWhere((r) => r.method == 'PATCH');
+      expect(jsonDecode(patch.body), {'weekly_report_enabled': true});
+    });
+
+    test('日报与周报可以各改各的，互不牵连', () async {
+      final log = <http.Request>[];
+      final api = CloudApi(
+        baseUrl: 'http://x',
+        accessToken: 'T',
+        client: MockClient((req) async {
+          log.add(req);
+          return _res(_account());
+        }),
+      );
+
+      await api.updateReportPrefs(enabled: false);
+
+      final patch = log.firstWhere((r) => r.method == 'PATCH');
+      // 只带日报那一项：顺手把周报也发过去会覆盖掉用户的另一个选择
+      expect(jsonDecode(patch.body), {'report_enabled': false});
     });
 
     test('什么都不改时直接报错，不发空请求', () async {
