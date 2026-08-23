@@ -9,8 +9,15 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
+import '../core/api_error.dart';
 import '../core/contracts/command.dart';
+import '../core/contracts/history.dart';
 import '../core/contracts/rule.dart';
+
+// 历史模型与错误类型现在住在 core/，但既有调用方都从这里 import ——
+// 转出去，免得为一次搬家把十几处 import 全改一遍。
+export '../core/api_error.dart';
+export '../core/contracts/history.dart';
 
 /// 账号信息与日报偏好。
 class AccountInfo {
@@ -96,55 +103,6 @@ class CloudDevice {
   );
 }
 
-/// 分钟级历史数据点。原始秒级数据不入库 —— 见服务端架构 §4。
-class HistoryPoint {
-  const HistoryPoint({
-    required this.bucketAt,
-    required this.presenceS,
-    this.co2Avg,
-    this.co2Max,
-    this.temperatureAvg,
-    this.humidityAvg,
-    this.noiseAvg,
-    this.luxAvg,
-  });
-
-  final int bucketAt;
-  final int presenceS;
-  final double? co2Avg;
-  final double? co2Max;
-  final double? temperatureAvg;
-  final double? humidityAvg;
-  final double? noiseAvg;
-  final double? luxAvg;
-
-  factory HistoryPoint.fromJson(Map<String, Object?> j) => HistoryPoint(
-    bucketAt: (j['bucket_at'] as num?)?.toInt() ?? 0,
-    presenceS: (j['presence_s'] as num?)?.toInt() ?? 0,
-    co2Avg: (j['co2_avg'] as num?)?.toDouble(),
-    co2Max: (j['co2_max'] as num?)?.toDouble(),
-    temperatureAvg: (j['temperature_avg'] as num?)?.toDouble(),
-    humidityAvg: (j['humidity_avg'] as num?)?.toDouble(),
-    noiseAvg: (j['noise_avg'] as num?)?.toDouble(),
-    luxAvg: (j['lux_avg'] as num?)?.toDouble(),
-  );
-}
-
-class HistoryResult {
-  const HistoryResult({
-    required this.points,
-    required this.truncated,
-    required this.retentionFloor,
-  });
-
-  final List<HistoryPoint> points;
-
-  /// true 表示请求区间超出了套餐的保留期，已被裁剪。
-  /// 界面应当提示用户，而不是让他以为那段时间真的没数据。
-  final bool truncated;
-  final int retentionFloor;
-}
-
 class AuthTokens {
   const AuthTokens({required this.access, required this.refresh, required this.expiresIn});
 
@@ -153,14 +111,6 @@ class AuthTokens {
   final int expiresIn;
 }
 
-/// 云端 API 调用失败。用 [CommandError] 复用同一套错误码与用户文案。
-class CloudException implements Exception {
-  const CloudException(this.error);
-  final CommandError error;
-
-  @override
-  String toString() => error.display;
-}
 
 class CloudApi {
   CloudApi({

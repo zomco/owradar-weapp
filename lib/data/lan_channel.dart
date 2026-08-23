@@ -12,7 +12,9 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:web_socket_channel/web_socket_channel.dart';
 
+import '../core/api_error.dart';
 import '../core/contracts/command.dart';
+import '../core/contracts/history.dart';
 import '../core/contracts/telemetry.dart';
 import '../core/lan_reachability.dart';
 import 'device_channel.dart';
@@ -247,6 +249,82 @@ class LanChannel implements DeviceChannel {
     } on Object catch (e) {
       return CommandFailed(CommandError(ErrorCode.transport, '$e'));
     }
+  }
+
+  /// 设备自己存的最近三小时（契约 §9.1 的 `GET /api/v1/history`）。
+  ///
+  /// 局域网模式下这是**唯一**的历史来源 —— 云关掉之后，
+  /// 没有它历史页就是一片空白。
+  ///
+  /// 设备给的是按列的序列（每个指标一个数组），这里转成 App 统一用的
+  /// 按点结构。转换放在这一层而不是让 UI 认两种形状：
+  /// UI 认两种形状，就意味着每加一个图表都要写两遍。
+  Future<HistoryResult> history({required int fromS}) async {
+    final res = await _http
+        .get(_uri('/api/v1/history'), headers: _headers)
+        .timeout(const Duration(seconds: 10));
+
+    if (res.statusCode != 200) {
+      throw CloudException(
+        CommandError(
+          res.statusCode == 401 ? ErrorCode.unauthorized : ErrorCode.transport,
+          '取历史失败（HTTP ${res.statusCode}）',
+        ),
+      );
+    }
+
+    final body = jsonDecode(utf8.decode(res.bodyBytes));
+    if (body is! Map) {
+      throw const CloudException(CommandError(ErrorCode.internal, '历史响应格式非法'));
+    }
+    final j = body.cast<String, Object?>();
+
+    final startAt = (j['start_at'] as num?)?.toInt() ?? 0;
+    final bucketS = (j['bucket_s'] as num?)?.toInt() ?? 60;
+    final series = (j['series'] as Map?)?.cast<String, Object?>() ?? const {};
+
+    List<double?> col(String key) {
+      final raw = series[key];
+      if (raw is! List) return const [];
+      // null 要原样保留 —— 设备用它表示「这一分钟没有有效读数」。
+      // 折成 0 会在曲线上画出一条假谷底。
+      return raw.map((v) => v is num ? v.toDouble() : null).toList();
+    }
+
+    final co2 = col('co2');
+    final temperature = col('temperature');
+    final humidity = col('humidity');
+    final noise = col('noise');
+    final lux = col('lux');
+    final presence = col('presence_s');
+
+    final count = (j['count'] as num?)?.toInt() ?? co2.length;
+    double? at(List<double?> c, int i) => i < c.length ? c[i] : null;
+
+    final points = <HistoryPoint>[
+      for (var i = 0; i < count; i++)
+        HistoryPoint(
+          bucketAt: startAt + i * bucketS,
+          presenceS: (at(presence, i) ?? 0).round(),
+          co2Avg: at(co2, i),
+          // 设备不存分钟内峰值 —— 省 RAM，而三小时的曲线看趋势不看毛刺
+          co2Max: null,
+          temperatureAvg: at(temperature, i),
+          humidityAvg: at(humidity, i),
+          noiseAvg: at(noise, i),
+          luxAvg: at(lux, i),
+        ),
+    ];
+
+    // 设备只存三小时。用户选了更长的跨度时如实说被截断了 ——
+    // 直接给三小时的数据而不吭声，用户会以为更早那段真的没事发生。
+    final truncated = startAt > 0 && fromS < startAt;
+
+    return HistoryResult(
+      points: points,
+      truncated: truncated,
+      retentionFloor: startAt,
+    );
   }
 
   @override

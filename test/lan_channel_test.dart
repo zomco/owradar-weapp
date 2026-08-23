@@ -20,6 +20,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:mmradar_app/core/lan_reachability.dart';
+import 'package:mmradar_app/core/api_error.dart';
+import 'package:mmradar_app/core/contracts/command.dart';
 import 'package:mmradar_app/data/device_channel.dart';
 import 'package:mmradar_app/data/lan_channel.dart';
 import 'package:stream_channel/stream_channel.dart';
@@ -158,6 +160,102 @@ void main() {
       expect(calls, isEmpty);
 
       await channel.dispose();
+    });
+  });
+
+  group('设备端历史（局域网模式下唯一的历史来源）', () {
+    Map<String, Object?> deviceHistory({
+      int startAt = 1700000000,
+      int count = 3,
+      List<Object?>? co2,
+    }) => {
+      'start_at': startAt,
+      'bucket_s': 60,
+      'count': count,
+      'series': {
+        'co2': co2 ?? [800, 850, 900],
+        'temperature': [24.1, 24.2, 24.3],
+        'humidity': [50.0, 51.0, 52.0],
+        'noise': [45.0, 46.0, 47.0],
+        'lux': [400, 410, 420],
+        'presence_s': [60, 30, 0],
+      },
+    };
+
+    LanChannel channelReturning(Map<String, Object?> body, {int status = 200}) => LanChannel(
+      host: '192.168.1.50',
+      token: 'pair-token-123',
+      httpClient: MockClient((req) async => _res(body, status)),
+      connectWebSocket: (uri) => _FakeSocket(uri),
+    );
+
+    test('按列的序列被转成按点的结构', () async {
+      // 设备给列、App 用点。转换必须在通道层做完 ——
+      // 让 UI 认两种形状，意味着每加一个图表都要写两遍。
+      final r = await channelReturning(deviceHistory()).history(fromS: 1700000000);
+
+      expect(r.points, hasLength(3));
+      expect(r.points[0].bucketAt, 1700000000);
+      expect(r.points[1].bucketAt, 1700000060, reason: '时间轴按 bucket_s 递推');
+      expect(r.points[2].co2Avg, 900);
+      expect(r.points[0].temperatureAvg, 24.1);
+      expect(r.points[1].presenceS, 30);
+    });
+
+    test('null 原样保留，不折成 0', () async {
+      // 0 是合法读数。折成 0 会在曲线上画出一条假谷底，
+      // 而用户从图上看不出那其实是「这一分钟没数据」。
+      final r = await channelReturning(
+        deviceHistory(co2: [800, null, 900]),
+      ).history(fromS: 1700000000);
+
+      expect(r.points[1].co2Avg, isNull);
+      expect(r.points[0].co2Avg, 800);
+    });
+
+    test('设备不存分钟内峰值，co2Max 为 null 而不是拿均值顶替', () async {
+      final r = await channelReturning(deviceHistory()).history(fromS: 1700000000);
+      expect(r.points[0].co2Max, isNull);
+    });
+
+    test('要的时间跨度超出设备存量时标记为已裁剪', () async {
+      // 设备只有三小时。默不作声地只给三小时，用户会以为更早那段真的没事。
+      final r = await channelReturning(
+        deviceHistory(startAt: 1700000000),
+      ).history(fromS: 1700000000 - 86400);
+
+      expect(r.truncated, isTrue);
+      expect(r.retentionFloor, 1700000000);
+    });
+
+    test('跨度落在设备存量之内时不谎报裁剪', () async {
+      final r = await channelReturning(
+        deviceHistory(startAt: 1700000000),
+      ).history(fromS: 1700000000 + 60);
+
+      expect(r.truncated, isFalse);
+    });
+
+    test('401 报成鉴权错误，而不是笼统的传输失败', () async {
+      // 配对 Token 过期时用户需要知道该去重新配对，而不是查网络
+      await expectLater(
+        channelReturning(const {}, status: 401).history(fromS: 0),
+        throwsA(
+          isA<CloudException>().having((e) => e.error.code, 'code', ErrorCode.unauthorized),
+        ),
+      );
+    });
+
+    test('设备还没攒到数据时给空结果，而不是抛异常', () async {
+      final r = await channelReturning({
+        'start_at': 0,
+        'bucket_s': 60,
+        'count': 0,
+        'series': <String, Object?>{},
+      }).history(fromS: 1700000000);
+
+      expect(r.points, isEmpty);
+      expect(r.truncated, isFalse, reason: '没数据不等于被裁剪');
     });
   });
 

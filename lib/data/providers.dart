@@ -260,15 +260,26 @@ final historyMetricProvider = NotifierProvider<HistoryMetricNotifier, Metric>(
 );
 
 final historyProvider = FutureProvider<HistoryResult>((ref) async {
-  final api = ref.watch(cloudApiProvider);
   final session = ref.watch(sessionProvider);
   final span = ref.watch(historySpanProvider);
+  final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
 
+  // 局域网模式：历史来自**设备自己**存的三小时。
+  // 这是「可以完全关掉云」这条承诺的一部分 —— 早先这里直接返回空，
+  // 于是关掉云的用户打开历史页看到的是一片空白。
+  if (session.mode == ConnectMode.lanOnly) {
+    final channel = ref.watch(channelProvider);
+    if (channel is! LanChannel) {
+      return const HistoryResult(points: [], truncated: false, retentionFloor: 0);
+    }
+    return channel.history(fromS: now - span);
+  }
+
+  final api = ref.watch(cloudApiProvider);
   if (api == null || session.deviceId == null) {
     return const HistoryResult(points: [], truncated: false, retentionFloor: 0);
   }
 
-  final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
   return api.history(session.deviceId!, from: now - span, to: now);
 }, retry: backOffThenGiveUp);
 
