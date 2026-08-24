@@ -158,18 +158,23 @@ class _LanSettingsState extends ConsumerState<_LanSettings> {
     super.dispose();
   }
 
-  void _apply() {
+  Future<void> _apply() async {
+    final messenger = ScaffoldMessenger.of(context);
     final port = int.tryParse(_port.text.trim());
     if (port == null || port < 1 || port > 65535) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('端口不合法')));
+      messenger.showSnackBar(const SnackBar(content: Text('端口不合法')));
       return;
     }
-    ref
+
+    // 等写盘落定再提示。不等的话，「已保存」出现在真的存进去之前 ——
+    // 存失败时用户看到的仍然是成功。
+    await ref
         .read(endpointProvider.notifier)
         .update(DeviceEndpoint(host: _host.text.trim(), port: port, token: _token.text.trim()));
+
     // 端点变了要重建通道，否则还连着旧地址
     ref.invalidate(channelProvider);
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('已重新连接')));
+    messenger.showSnackBar(const SnackBar(content: Text('已保存并重新连接')));
   }
 
   @override
