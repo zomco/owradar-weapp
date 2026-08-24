@@ -13,6 +13,7 @@ import '../core/contracts/command.dart';
 import '../core/contracts/rule.dart';
 import '../core/contracts/telemetry.dart';
 import 'cloud_api.dart';
+import 'endpoint_store.dart';
 import 'cloud_channel.dart';
 import 'device_channel.dart';
 import 'lan_channel.dart';
@@ -108,12 +109,38 @@ final sessionProvider = NotifierProvider<SessionNotifier, Session>(SessionNotifi
 // ── 局域网端点 ────────────────────────────────────────────
 
 class EndpointNotifier extends Notifier<DeviceEndpoint> {
-  @override
-  DeviceEndpoint build() => DeviceEndpoint.simulator;
+  final _store = EndpointStore();
 
-  void update(DeviceEndpoint next) => state = next;
-  void setHost(String host, {int? port}) => state = state.copyWith(host: host, port: port);
-  void setToken(String token) => state = state.copyWith(token: token);
+  @override
+  DeviceEndpoint build() {
+    // 与 SessionNotifier 同一个套路：先给同步默认值，再异步补上持久化内容。
+    // Notifier.build 不能是 async，而 UI 不该为读一次偏好卡住。
+    unawaited(_restore());
+    return DeviceEndpoint.simulator;
+  }
+
+  Future<void> _restore() async {
+    final saved = await _store.load();
+    // 没保存过就留在模拟器地址上 —— 那是开发默认值，
+    // 用户第一次进设置页看到的东西。
+    if (saved != null) state = saved;
+  }
+
+  Future<void> update(DeviceEndpoint next) async {
+    state = next;
+    await _store.save(next);
+  }
+
+  Future<void> setHost(String host, {int? port}) =>
+      update(state.copyWith(host: host, port: port));
+
+  Future<void> setToken(String token) => update(state.copyWith(token: token));
+
+  /// 忘掉这台设备。换设备时用。
+  Future<void> forget() async {
+    await _store.clear();
+    state = DeviceEndpoint.simulator;
+  }
 }
 
 final endpointProvider = NotifierProvider<EndpointNotifier, DeviceEndpoint>(EndpointNotifier.new);

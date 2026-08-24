@@ -121,6 +121,7 @@ flutter test      # 107 项
 | `test/token_refresh_test.dart` | 令牌过期后的自动刷新，重点是并发合并 |
 | `test/report_settings_test.dart` | 日报/周报设置；能不能用由服务端配额决定 |
 | `test/secret_store_test.dart` | 凭证与偏好分开存；旧数据迁移不把用户登出 |
+| `test/endpoint_store_test.dart` | 局域网端点持久化；配对码走凭证存储 |
 | `test/lan_channel_test.dart` | 订阅带 token；设备端历史的列转点与 null 保留 |
 | `test/threshold_profile_test.dart` | 地区档：选地区而非标准号；换档前必须确认 |
 | `test/cloud_ui_test.dart` | 设备列表、历史曲线、设置页 |
@@ -246,6 +247,4 @@ Web 的缓解手段在**服务端**：access token 15 分钟过期，refresh tok
 
 - **BLE 配网**（`flutter_blue_plus`，需 Android SDK）—— 见契约 §9.4
 - mDNS 自动发现 `_mmradar._tcp`
-- 局域网端点（地址与配对 Token）**不持久化** —— 现在只存在内存里，
-  重启 App 要重填。设置页的「保存并重连」只对本次运行有效
 - 本地通知 / FCM / APNs
